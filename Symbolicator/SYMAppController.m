@@ -30,7 +30,7 @@ NSString *const kSearchDirectory = @"kSearchDirectory";
         NSString *searchFolderPath = [[NSUserDefaults standardUserDefaults] objectForKey:kSearchDirectory];
         if (searchFolderPath) {
             self.dSYMURL = [NSURL fileURLWithPath:searchFolderPath];
-//            [SYMCache cacheFodler:self.dSYMURL];
+            [SYMCache cacheFodler:self.dSYMURL];
         }
         [self updateStatus];
     }
