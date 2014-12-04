@@ -7,6 +7,7 @@
 //
 
 #import "SYMLocator.h"
+#import "SYMCache.h"
 
 @interface SYMLocator ()
 
@@ -71,22 +72,28 @@
 }
 
 - (NSURL *) searchDSYM: (NSString *) version {
-    
     NSPipe* outputPipe = [NSPipe pipe];
     NSFileHandle* outputFileHandle = [outputPipe fileHandleForReading];
     NSTask* task = [self createSearchTaskWithOutputPipe:outputPipe version:version folder:self.folderURL];
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        [task launch];
-        [task waitUntilExit];
-        
-        NSData* data = [outputFileHandle readDataToEndOfFile];
-        NSString *result =[[NSString alloc] initWithData:data
-                                                encoding:NSUTF8StringEncoding];
-        NSURL *dSYMURL = [self dSYMURLFromSearchResults:result];
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            self.completion(dSYMURL, version);
-        });
+        NSURL *dSYMURL = [SYMCache valueForVersion:version];
+        if (dSYMURL) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self.completion(dSYMURL, version);
+            });
+        } else {
+            [task launch];
+            [task waitUntilExit];
+            
+            NSData* data = [outputFileHandle readDataToEndOfFile];
+            NSString *result =[[NSString alloc] initWithData:data
+                                                    encoding:NSUTF8StringEncoding];
+            dSYMURL = [self dSYMURLFromSearchResults:result];
+            
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self.completion(dSYMURL, version);
+            });
+        }
     });
     return nil;
 }

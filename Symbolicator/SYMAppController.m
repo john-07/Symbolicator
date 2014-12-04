@@ -9,6 +9,7 @@
 #import "SYMAppController.h"
 #import "SYMLocator.h"
 #import "SYMSymbolicator.h"
+#import "SYMCache.h"
 
 NSString *const kSearchDirectory = @"kSearchDirectory";
 
@@ -29,6 +30,7 @@ NSString *const kSearchDirectory = @"kSearchDirectory";
         NSString *searchFolderPath = [[NSUserDefaults standardUserDefaults] objectForKey:kSearchDirectory];
         if (searchFolderPath) {
             self.dSYMURL = [NSURL fileURLWithPath:searchFolderPath];
+//            [SYMCache cacheFodler:self.dSYMURL];
         }
         [self updateStatus];
     }
@@ -61,6 +63,12 @@ NSString *const kSearchDirectory = @"kSearchDirectory";
      completionHandler:^(NSInteger result) {
          if (result == NSFileHandlingPanelOKButton)
          {
+             NSURL *url = chooser.URL;
+             if (![url.pathExtension isEqualToString:@"dSYM"]) {
+                 [[NSUserDefaults standardUserDefaults] setObject:url.path forKey:kSearchDirectory];
+                 [[NSUserDefaults standardUserDefaults] synchronize];
+                 [SYMCache cacheFodler:url];
+             }
              weakSelf.dSYMURL = [chooser URL];
              [weakSelf updateStatus];
          }
@@ -73,28 +81,25 @@ NSString *const kSearchDirectory = @"kSearchDirectory";
     
     [SYMLocator findDSYMWithPlistUrl:self.crashReportURL inFolder:self.dSYMURL completion:^(NSURL * dSYMURL, NSString *version) {
         if (dSYMURL) {
-            [[NSUserDefaults standardUserDefaults] setObject:weakSelf.dSYMURL.path forKey:kSearchDirectory];
-            [[NSUserDefaults standardUserDefaults] synchronize];
-            
-            weakSelf.dSYMURL = dSYMURL;
-            [weakSelf symbolicate:nil];
+            [weakSelf symbolicate:dSYMURL];
         } else {
             [weakSelf setEnabled:NO withStatusString:[NSString stringWithFormat:@"dSYM file not found for app version: %@", version]];
         }
     }];
 }
 
-- (void)symbolicate:(id)sender
+- (void)symbolicate:(NSURL *) dSYMURL
 {
     [self setEnabled:NO withStatusString:@"Symbolication in process..."];
     __weak typeof(self) weakSelf = self;
     
     [SYMSymbolicator
      symbolicateCrashReport:self.crashReportURL
-     dSYM:self.dSYMURL
+     dSYM:dSYMURL
      withCompletionBlock:^(NSString *symbolicatedReport) {
          weakSelf.symbolicatedReport = symbolicatedReport;
-         [weakSelf setEnabled:YES withStatusString:@"Symbolicate"];
+         NSString *status = [NSString stringWithFormat:@"Symbolicate (%@)", dSYMURL];
+         [weakSelf setEnabled:YES withStatusString:status];
      }];
 }
 
