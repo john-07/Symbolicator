@@ -20,11 +20,13 @@
 @implementation SYMLocator
 
 + (void) findDSYMWithPlistUrl: (NSURL *) crashReportURL inFolder: (NSURL *) folderURL completion: (void(^)(NSURL * dSYMURL, NSString *version)) completion {
-    SYMLocator *locator = [SYMLocator new];
-    locator.crashReportURL = crashReportURL;
-    locator.folderURL = folderURL;
-    locator.completion = completion;
-    [locator execute];
+    if (completion) {
+        SYMLocator *locator = [SYMLocator new];
+        locator.crashReportURL = crashReportURL;
+        locator.folderURL = folderURL;
+        locator.completion = completion;
+        [locator execute];
+    }
 }
 
 - (void) execute {
@@ -71,7 +73,7 @@
     return version;
 }
 
-- (NSURL *) searchDSYM: (NSString *) version {
+- (void) searchDSYM: (NSString *) version {
     NSPipe* outputPipe = [NSPipe pipe];
     NSFileHandle* outputFileHandle = [outputPipe fileHandleForReading];
     NSTask* task = [self createSearchTaskWithOutputPipe:outputPipe version:version folder:self.folderURL];
@@ -95,7 +97,6 @@
             });
         }
     });
-    return nil;
 }
 
 - (NSURL *) dSYMURLFromSearchResults: (NSString *) result {
