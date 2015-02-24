@@ -81,26 +81,71 @@ NSString *const kSearchDirectory = @"kSearchDirectory";
     
     [SYMLocator findDSYMWithPlistUrl:self.crashReportURL inFolder:self.dSYMURL completion:^(NSURL * dSYMURL, NSString *version) {
         if (dSYMURL) {
-            [weakSelf symbolicate:dSYMURL];
+            [weakSelf symbolicate:dSYMURL version:version];
         } else {
             [weakSelf setEnabled:NO withStatusString:[NSString stringWithFormat:@"dSYM file not found for app version: %@", version]];
         }
     }];
 }
 
-- (void)symbolicate:(NSURL *) dSYMURL
+- (void) copyFilesToCrashesDirectoryWithVersion: (NSString *) version completion: (void (^)(NSURL *crashURL, NSURL *dSYMURL)) completion {
+    
+    NSAssert(self.crashReportURL, @"No crash report URL");
+    NSAssert(self.dSYMURL, @"No dSYM URL");
+    NSAssert(version, @"No version");
+    
+    dispatch_async(dispatch_get_global_queue(0, 0), ^{
+        NSURL *appURL = [[self.dSYMURL URLByDeletingLastPathComponent] URLByDeletingLastPathComponent];
+        appURL = [[appURL URLByAppendingPathComponent:@"Products"] URLByAppendingPathComponent:@"Applications"];
+        
+        NSError *error = nil;
+        NSString *appName = [[[NSFileManager defaultManager] contentsOfDirectoryAtPath:appURL.path error:&error] firstObject];
+        
+        if (appName) {
+            appURL = [appURL URLByAppendingPathComponent:appName];
+        }
+        
+        NSURL *docDir = [[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
+        NSURL *crashesURL = [[docDir URLByAppendingPathComponent:@"Crashes"] URLByAppendingPathComponent:version];
+        
+        if (![[NSFileManager defaultManager] fileExistsAtPath:crashesURL.path]) {
+            [[NSFileManager defaultManager] createDirectoryAtURL:crashesURL withIntermediateDirectories:true attributes:nil error:&error];
+        }
+        
+        NSURL *tempCrashURL = [crashesURL URLByAppendingPathComponent:self.crashReportURL.lastPathComponent];
+        NSURL *tempDSYMURL = [crashesURL URLByAppendingPathComponent:[appName stringByAppendingString:@".dSYM"]];
+        NSURL *tempAppURL = [crashesURL URLByAppendingPathComponent:appName];
+        error = nil;
+        
+        if (appName) {
+            [[NSFileManager defaultManager] copyItemAtURL:appURL toURL:tempAppURL error:&error];
+        }
+        [[NSFileManager defaultManager] copyItemAtURL:self.dSYMURL toURL:tempDSYMURL error:&error];
+        [[NSFileManager defaultManager] copyItemAtURL:self.crashReportURL toURL:tempCrashURL error:&error];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            completion(tempCrashURL, tempDSYMURL);
+        });
+    });
+}
+
+- (void)symbolicate:(NSURL *) dSYMURL version: (NSString *) version
 {
     [self setEnabled:NO withStatusString:@"Symbolication in process..."];
     __weak typeof(self) weakSelf = self;
     
-    [SYMSymbolicator
-     symbolicateCrashReport:self.crashReportURL
-     dSYM:dSYMURL
-     withCompletionBlock:^(NSString *symbolicatedReport) {
-         weakSelf.symbolicatedReport = symbolicatedReport;
-         NSString *status = [NSString stringWithFormat:@"Symbolicate (%@)", dSYMURL];
-         [weakSelf setEnabled:YES withStatusString:status];
-     }];
+    self.dSYMURL = dSYMURL;
+    
+    [self copyFilesToCrashesDirectoryWithVersion:version completion:^(NSURL *crashURL, NSURL *dSYMURL) {
+        [SYMSymbolicator
+         symbolicateCrashReport:crashURL
+         dSYM:dSYMURL
+         withCompletionBlock:^(NSString *symbolicatedReport) {
+             weakSelf.symbolicatedReport = symbolicatedReport;
+             NSString *status = [NSString stringWithFormat:@"Symbolicate (%@)", dSYMURL];
+             [weakSelf setEnabled:YES withStatusString:status];
+         }];
+    }];
+    
 }
 
 
