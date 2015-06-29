@@ -94,6 +94,7 @@ NSString *const kSearchDirectory = @"kSearchDirectory";
     NSAssert(self.dSYMURL, @"No dSYM URL");
     NSAssert(version, @"No version");
     
+    __weak typeof(self) this = self;
     dispatch_async(dispatch_get_global_queue(0, 0), ^{
         NSURL *appURL = [[self.dSYMURL URLByDeletingLastPathComponent] URLByDeletingLastPathComponent];
         appURL = [[appURL URLByAppendingPathComponent:@"Products"] URLByAppendingPathComponent:@"Applications"];
@@ -103,28 +104,33 @@ NSString *const kSearchDirectory = @"kSearchDirectory";
         
         if (appName) {
             appURL = [appURL URLByAppendingPathComponent:appName];
+            NSURL *docDir = [[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
+            NSURL *crashesURL = [[docDir URLByAppendingPathComponent:@"Crashes"] URLByAppendingPathComponent:version];
+            
+            if (![[NSFileManager defaultManager] fileExistsAtPath:crashesURL.path]) {
+                [[NSFileManager defaultManager] createDirectoryAtURL:crashesURL withIntermediateDirectories:true attributes:nil error:&error];
+            }
+            
+            NSURL *tempCrashURL = [crashesURL URLByAppendingPathComponent:self.crashReportURL.lastPathComponent];
+            NSURL *tempDSYMURL = [crashesURL URLByAppendingPathComponent:[appName stringByAppendingString:@".dSYM"]];
+            NSURL *tempAppURL = [crashesURL URLByAppendingPathComponent:appName];
+            error = nil;
+            
+            if (appName) {
+                [[NSFileManager defaultManager] copyItemAtURL:appURL toURL:tempAppURL error:&error];
+            }
+            [[NSFileManager defaultManager] copyItemAtURL:self.dSYMURL toURL:tempDSYMURL error:&error];
+            [[NSFileManager defaultManager] copyItemAtURL:self.crashReportURL toURL:tempCrashURL error:&error];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(tempCrashURL, tempDSYMURL);
+            });
+
+        } else {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(this.crashReportURL, this.dSYMURL);
+            });
         }
         
-        NSURL *docDir = [[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
-        NSURL *crashesURL = [[docDir URLByAppendingPathComponent:@"Crashes"] URLByAppendingPathComponent:version];
-        
-        if (![[NSFileManager defaultManager] fileExistsAtPath:crashesURL.path]) {
-            [[NSFileManager defaultManager] createDirectoryAtURL:crashesURL withIntermediateDirectories:true attributes:nil error:&error];
-        }
-        
-        NSURL *tempCrashURL = [crashesURL URLByAppendingPathComponent:self.crashReportURL.lastPathComponent];
-        NSURL *tempDSYMURL = [crashesURL URLByAppendingPathComponent:[appName stringByAppendingString:@".dSYM"]];
-        NSURL *tempAppURL = [crashesURL URLByAppendingPathComponent:appName];
-        error = nil;
-        
-        if (appName) {
-            [[NSFileManager defaultManager] copyItemAtURL:appURL toURL:tempAppURL error:&error];
-        }
-        [[NSFileManager defaultManager] copyItemAtURL:self.dSYMURL toURL:tempDSYMURL error:&error];
-        [[NSFileManager defaultManager] copyItemAtURL:self.crashReportURL toURL:tempCrashURL error:&error];
-        dispatch_async(dispatch_get_main_queue(), ^{
-            completion(tempCrashURL, tempDSYMURL);
-        });
     });
 }
 
