@@ -24,21 +24,28 @@ static NSString* const kXcodeBundleID = @"com.apple.dt.Xcode";
         
         dispatch_queue_t concurrentQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0);
         dispatch_async(concurrentQueue, ^{
+            
             NSPipe* outputPipe = [NSPipe pipe];
             NSFileHandle* outputFileHandle = [outputPipe fileHandleForReading];
+            
+            [outputFileHandle setReadabilityHandler:^(NSFileHandle *handler) {
+                NSString* symbolicated = [weakSelf stringFromFileHandle:handler];
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    completionBlock(symbolicated);
+                });
+            }];
             
             NSTask* symbolicationTask = [weakSelf
                                          createSymbolicationTaskWithOutputPipe:outputPipe
                                          crashReportURL:crashReportURL
                                          dSYMURL:dSYMURL];
+            
+            symbolicationTask.terminationHandler = ^(NSTask *task){
+                [[task.standardOutput fileHandleForReading] setReadabilityHandler:nil];
+            };
+            
             [symbolicationTask launch];
-            [symbolicationTask waitUntilExit];
             
-            NSString* symbolicated = [weakSelf stringFromFileHandle:outputFileHandle];
-            
-            dispatch_async(dispatch_get_main_queue(), ^{
-                completionBlock(symbolicated);
-            });
         });
     }
 }
@@ -65,6 +72,7 @@ static NSString* const kXcodeBundleID = @"com.apple.dt.Xcode";
     [symbolicationTask setLaunchPath:kPathToSymbolicateTool];
     [symbolicationTask setArguments:arguments];
     [symbolicationTask setEnvironment:environment];
+    [symbolicationTask setStandardInput:[NSPipe pipe]];
     [symbolicationTask setStandardOutput:outputPipe];
     [symbolicationTask setStandardError:nullFileHandle];
     
@@ -74,7 +82,8 @@ static NSString* const kXcodeBundleID = @"com.apple.dt.Xcode";
 
 + (NSURL *)XcodeURL
 {
-    return [[NSWorkspace sharedWorkspace] URLForApplicationWithBundleIdentifier:kXcodeBundleID];
+    return [NSURL fileURLWithPath:@"/Applications/Xcode.app"];
+//    return [[NSWorkspace sharedWorkspace] URLForApplicationWithBundleIdentifier:kXcodeBundleID];
 }
 
 
