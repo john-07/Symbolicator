@@ -8,7 +8,7 @@
 
 #import "SYMSymbolicator.h"
 
-static NSString* const kPathToSymbolicateTool = @"/Applications/Xcode.app/Contents/SharedFrameworks/DTDeviceKitBase.framework/Versions/A/Resources/symbolicatecrash";
+static NSString* const kPathToSymbolicateTool = @"/Applications/Xcode.app/Contents/SharedFrameworks/DVTFoundation.framework/Versions/A/Resources/symbolicatecrash";
 
 static NSString* const kXcodeBundleID = @"com.apple.dt.Xcode";
 
